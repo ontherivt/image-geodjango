@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
   schedule:
     # Monthly-ish: 1st of each month at 09:17 UTC
+    # Monthly rebuild for Debian + GDAL + security patches
     - cron: "17 9 1 * *"
   workflow_dispatch:
 
