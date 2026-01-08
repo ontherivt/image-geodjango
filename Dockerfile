@@ -15,4 +15,5 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     postgresql-client \
     net-tools \
+    vim \
     && rm -rf /var/lib/apt/lists/*
