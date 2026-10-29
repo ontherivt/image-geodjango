@@ -4,13 +4,13 @@ on:
   push:
     branches: [ "main" ]
   schedule:
-    # Monthly-ish: 1st of each month at 09:17 UTC
-    # Monthly rebuild for Debian + GDAL + security patches
-    - cron: "17 9 1 * *"
+    # Weekly: Mondays at 09:17 UTC
+    # Rebuild for uv/Python base image updates, Debian + GDAL + security patches
+    - cron: "17 9 * * 1"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # lets the LAST_BUILD commit step push
   packages: write
 
 env:
@@ -49,10 +49,15 @@ jobs:
             type=sha,format=short
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          # Always re-pull the base image, and skip the layer cache on scheduled
+          # runs so the apt-get layer actually picks up new package versions.
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           # If you don't care about ARM, remove platforms for faster builds.
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
@@ -60,3 +65,44 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Fails the run on fixable HIGH/CRITICAL findings. The image is already
+      # pushed by this point; the failure is what triggers the Slack alert below.
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@0.33.1
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # Records the last build in git history. This commit also counts as repo
+      # activity, which keeps GitHub from disabling the schedule after 60 days.
+      - name: Record last build
+        if: always() && steps.build.outcome == 'success' && github.event_name == 'schedule'
+        run: |
+          {
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "digest=${{ steps.build.outputs.digest }}"
+          } > LAST_BUILD
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add LAST_BUILD
+          git commit -m "Record last build [skip ci]"
+          # main may have advanced during the build; rebase onto it and retry.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "$GITHUB_REF_NAME" && git push && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: ":rotating_light: ${{ github.repository }} build-and-push failed (Trivy findings or build error): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
