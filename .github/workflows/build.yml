@@ -4,14 +4,15 @@ on:
   push:
     branches: [ "main" ]
   schedule:
-    # Monthly-ish: 1st of each month at 09:17 UTC
-    # Monthly rebuild for Debian + GDAL + security patches
-    - cron: "17 9 1 * *"
+    # Weekly: Mondays at 09:17 UTC
+    # Rebuild for uv/Python base image updates, Debian + GDAL + security patches
+    - cron: "17 9 * * 1"
   workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
+  actions: write # lets the keepalive step re-enable the schedule
 
 env:
   REGISTRY: ghcr.io
@@ -53,6 +54,10 @@ jobs:
         with:
           context: .
           push: true
+          # Always re-pull the base image, and skip the layer cache on scheduled
+          # runs so the apt-get layer actually picks up new package versions.
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           # If you don't care about ARM, remove platforms for faster builds.
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
@@ -60,3 +65,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+
+      # GitHub disables scheduled workflows after 60 days without repo activity.
+      - name: Keep schedule enabled
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow enable build.yml --repo "$GITHUB_REPOSITORY"

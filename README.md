@@ -14,7 +14,7 @@ Base Docker image for Python + GeoDjango workloads.
 - Python packages from pyproject.toml
 
 ## Update policy
-- Rebuilt monthly via GitHub Actions
+- Rebuilt weekly via GitHub Actions (no layer cache, base image re-pulled)
 - Rebuilt immediately for security or base-image issues
 
 ## Tagging
