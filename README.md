@@ -16,7 +16,7 @@ Base Docker image for Python + GeoDjango workloads.
 ## Update policy
 - Rebuilt weekly via GitHub Actions (no layer cache, base image re-pulled)
 - `LAST_BUILD` records the time and digest of the last scheduled build; each update is a commit
-- Each build is scanned with Trivy (HIGH/CRITICAL, report-only)
+- Each build is scanned with Trivy (fixable HIGH/CRITICAL fail the run and post to Slack)
 - Rebuilt immediately for security or base-image issues
 
 ## Tagging

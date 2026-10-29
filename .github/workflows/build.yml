@@ -65,8 +65,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Report-only for now: base images routinely carry unfixed CVEs.
-      # Flip exit-code to "1" to make HIGH/CRITICAL findings fail the build.
+      # Fails the run on fixable HIGH/CRITICAL findings. The image is already
+      # pushed by this point; the failure is what triggers the Slack alert below.
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@0.33.1
         env:
@@ -76,12 +76,12 @@ jobs:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "0"
+          exit-code: "1"
 
       # Records the last build in git history. This commit also counts as repo
       # activity, which keeps GitHub from disabling the schedule after 60 days.
       - name: Record last build
-        if: github.event_name != 'push'
+        if: always() && steps.build.outcome == 'success' && github.event_name != 'push'
         run: |
           {
             echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -92,3 +92,12 @@ jobs:
           git add LAST_BUILD
           git commit -m "Record last build [skip ci]"
           git push
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: ":rotating_light: ${{ github.repository }} build-and-push failed (Trivy findings or build error): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
