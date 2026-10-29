@@ -68,7 +68,7 @@ jobs:
       # Fails the run on fixable HIGH/CRITICAL findings. The image is already
       # pushed by this point; the failure is what triggers the Slack alert below.
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         env:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
