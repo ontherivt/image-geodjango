@@ -81,7 +81,7 @@ jobs:
       # Records the last build in git history. This commit also counts as repo
       # activity, which keeps GitHub from disabling the schedule after 60 days.
       - name: Record last build
-        if: always() && steps.build.outcome == 'success' && github.event_name != 'push'
+        if: always() && steps.build.outcome == 'success' && github.event_name == 'schedule'
         run: |
           {
             echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -91,7 +91,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add LAST_BUILD
           git commit -m "Record last build [skip ci]"
-          git push
+          # main may have advanced during the build; rebase onto it and retry.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "$GITHUB_REF_NAME" && git push && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
 
       - name: Notify Slack on failure
         if: failure()
